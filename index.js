@@ -1,5 +1,5 @@
-//v1.0.0 gr8r-revai-callback-worker
-//
+//v1.0.1 gr8r-revai-callback-worker
+//added code starting line 16 to add transcription ID and metadata to grafana logs
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -13,12 +13,14 @@ export default {
           return new Response('Missing required fields (id, status)', { status: 400 });
         }
 
-        await logToGrafana(env, 'info', 'Rev.ai callback received', {
+           await logToGrafana(env, 'info', 'Rev.ai callback received', {
           source: 'gr8r-revaicallback-worker',
           service: 'callback',
           id,
+          transcription_id: id, // duplicate under a clearer key
           status,
-          transcript: transcript || 'N/A'
+          transcript: transcript || 'N/A',
+          metadata: body.metadata || 'none'
         });
 
         return new Response(JSON.stringify({ success: true }), {
