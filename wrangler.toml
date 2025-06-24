@@ -5,3 +5,7 @@ compatibility_date = "2025-06-24"
 [[services]]
 binding = "GRAFANA"
 service = "gr8r-grafana-worker"
+
+[[routes]]
+pattern = "callback.gr8r.com/*"
+zone_name = "gr8r.com"
