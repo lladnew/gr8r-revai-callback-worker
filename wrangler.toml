@@ -1,4 +1,4 @@
-name = "gr8r-revaicallback-worker"
+name = "gr8r-revai-callback-worker"
 main = "index.js"
 compatibility_date = "2025-06-24"
 
