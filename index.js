@@ -1,11 +1,16 @@
-//v1.0.1 gr8r-revai-callback-worker
-//added code starting line 16 to add transcription ID and metadata to grafana logs
+// v1.0.2 gr8r-revai-callback-worker
+// CHANGED: added `request.clone().text()` to capture the full raw payload (v1.0.2)
+// ADDED: raw_payload to Grafana logs for successful callbacks (v1.0.2)
+// RETAINED: existing metadata, id, status, transcript logging (v1.0.2)
+// added code starting line 16 to add transcription ID and metadata to grafana logs (v1.0.1) 
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/revai/callback' && request.method === 'POST') {
       try {
+        const rawBody = await request.clone().text(); // NEW: clone request to capture raw JSON string
         const body = await request.json();
         const { id, status, transcript } = body;
 
@@ -13,14 +18,15 @@ export default {
           return new Response('Missing required fields (id, status)', { status: 400 });
         }
 
-           await logToGrafana(env, 'info', 'Rev.ai callback received', {
+        await logToGrafana(env, 'info', 'Rev.ai callback received', {
           source: 'gr8r-revaicallback-worker',
           service: 'callback',
           id,
           transcription_id: id, // duplicate under a clearer key
           status,
           transcript: transcript || 'N/A',
-          metadata: body.metadata || 'none'
+          metadata: body.metadata || 'none',
+          raw_payload: rawBody // NEW: full original payload for inspection
         });
 
         return new Response(JSON.stringify({ success: true }), {
