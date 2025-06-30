@@ -1,8 +1,18 @@
+// v1.0.4 gr8r-revai-callback-worker
+// CHANGED: Updated logToGrafana to match v1.0.9 format of grafana-worker (v1.0.4)
+// - WRAPPED all meta fields inside a `meta` object (v1.0.4)
+// - REMOVED top-level `source` and `service`, now embedded inside `meta` (v1.0.4)
+// - RETAINED: full raw_payload, transcription metadata, and body capture (v1.0.4)
+// 
 // v1.0.3 gr8r-revai-callback-worker
 // CHANGED: flattened Grafana logging payload to surface meta fields at top level (v1.0.3)
 // RETAINED: full raw_payload capture, metadata, and structured logging (v1.0.3)
+//
+// v1.0.2
 // CHANGED: added request.clone().text() to capture the full raw payload (v1.0.2)
 // ADDED: raw_payload to Grafana logs for successful callbacks (v1.0.2)
+//
+// v1.0.1
 // added code starting line 16 to add transcription ID and metadata to grafana logs (v1.0.1)
 
 export default {
@@ -54,9 +64,11 @@ async function logToGrafana(env, level, message, meta = {}) {
   const payload = {
     level,
     message,
-    source: meta.source || 'gr8r-revaicallback-worker',
-    service: meta.service || 'unknown',
-    ...meta // flatten all meta fields to top level
+    meta: {
+      source: meta.source || 'gr8r-revaicallback-worker',
+      service: meta.service || 'callback',
+      ...meta
+    }
   };
 
   try {
