@@ -1,8 +1,9 @@
-// v1.0.2 gr8r-revai-callback-worker
-// CHANGED: added `request.clone().text()` to capture the full raw payload (v1.0.2)
+// v1.0.3 gr8r-revai-callback-worker
+// CHANGED: flattened Grafana logging payload to surface meta fields at top level (v1.0.3)
+// RETAINED: full raw_payload capture, metadata, and structured logging (v1.0.3)
+// CHANGED: added request.clone().text() to capture the full raw payload (v1.0.2)
 // ADDED: raw_payload to Grafana logs for successful callbacks (v1.0.2)
-// RETAINED: existing metadata, id, status, transcript logging (v1.0.2)
-// added code starting line 16 to add transcription ID and metadata to grafana logs (v1.0.1) 
+// added code starting line 16 to add transcription ID and metadata to grafana logs (v1.0.1)
 
 export default {
   async fetch(request, env, ctx) {
@@ -26,7 +27,7 @@ export default {
           status,
           transcript: transcript || 'N/A',
           metadata: body.metadata || 'none',
-          raw_payload: rawBody // NEW: full original payload for inspection
+          raw_payload: rawBody // full original payload for inspection
         });
 
         return new Response(JSON.stringify({ success: true }), {
@@ -50,17 +51,15 @@ export default {
 };
 
 async function logToGrafana(env, level, message, meta = {}) {
-  try {
-    const payload = {
-      level,
-      message,
-      meta: {
-        source: meta.source || 'gr8r-revaicallback-worker',
-        service: meta.service || 'unknown',
-        ...meta
-      }
-    };
+  const payload = {
+    level,
+    message,
+    source: meta.source || 'gr8r-revaicallback-worker',
+    service: meta.service || 'unknown',
+    ...meta // flatten all meta fields to top level
+  };
 
+  try {
     const res = await env.GRAFANA.fetch('https://internal/api/grafana', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
