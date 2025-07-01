@@ -15,7 +15,7 @@ binding = "AIRTABLE"
 service = "gr8r-airtable-worker"
 
 [[services]]
-binding = "R2"
+binding = "ASSETS"
 service = "gr8r-assets-worker"
 
 [[routes]]
