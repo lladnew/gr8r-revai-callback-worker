@@ -6,18 +6,19 @@
 // - ADDED: logs for successful transcript fetch via internal API (v1.0.6)
 // - ADDED: logs error response body from fetch failures (v1.0.6)
 //
-// v1.0.5
-// ADDED: writes transcript to R2 as text/plain file under transcripts/ folder (v1.0.5)
-// ADDED: updates Airtable with R2 Transcript URL and Status=Transcription Complete (v1.0.5)
-// ADDED: triggers gr8r-socialcopyAI-worker to begin social copy generation (v1.0.5)
+// v1.0.5 gr8r-revai-callback-worker
+// ADDED: creates R2 transcript file and updates Airtable with R2 URL (v1.0.5)
+// - ADDED: structured R2 key naming using `transcripts/{title}.txt` (v1.0.5)
+// - ADDED: updates Airtable field 'R2 Transcript URL' and sets Status to 'Transcription Complete' (v1.0.5)
+// - RETAINED: metadata and full Grafana logging (v1.0.5)
 //
-// v1.0.4
+// v1.0.4 gr8r-revai-callback-worker
 // CHANGED: Updated logToGrafana to match v1.0.9 format of grafana-worker (v1.0.4)
 // - WRAPPED all meta fields inside a `meta` object (v1.0.4)
 // - REMOVED top-level `source` and `service`, now embedded inside `meta` (v1.0.4)
 // - RETAINED: full raw_payload, transcription metadata, and body capture (v1.0.4)
 //
-// v1.0.3
+// v1.0.3 gr8r-revai-callback-worker
 // CHANGED: flattened Grafana logging payload to surface meta fields at top level (v1.0.3)
 // RETAINED: full raw_payload capture, metadata, and structured logging (v1.0.3)
 //
@@ -38,43 +39,37 @@ export default {
         const body = await request.json();
         const { id, status, transcript, metadata } = body;
 
-        if (!id || !status) {
-          return new Response('Missing required fields (id, status)', { status: 400 });
+        if (!id || !status || !metadata) {
+          return new Response('Missing required fields (id, status, metadata)', { status: 400 });
         }
 
-        const title = metadata?.title || 'Untitled';
-        const fetchUrl = `https://revai.gr8r.com/api/revai/fetch-transcript?id=${id}&title=${encodeURIComponent(title)}`;
+        const title = metadata.title || 'Untitled';
 
-        let transcriptText;
-        try {
-          const transcriptRes = await fetch(fetchUrl);
-          if (!transcriptRes.ok) {
-            const bodyText = await transcriptRes.text();
-            throw new Error(`Transcript fetch failed: ${transcriptRes.status} - ${bodyText}`);
-          }
-          const json = await transcriptRes.json();
-          transcriptText = json.text;
-        } catch (err) {
-          await logToGrafana(env, 'error', 'Unexpected Rev.ai callback error', {
+        // Fetch transcript text from internal revai-worker
+        const fetchUrl = 'https://revai.gr8r.com/api/revai/fetch-transcript';
+        const fetchResp = await fetch(fetchUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+
+        const fetchText = await fetchResp.text();
+        if (!fetchResp.ok) {
+          await logToGrafana(env, 'error', 'Transcript fetch failed', {
+            error: `Transcript fetch failed: ${fetchResp.status}`,
+            revResponse: fetchText,
             source: 'gr8r-revaicallback-worker',
             service: 'callback',
-            error: err.message,
-            stack: err.stack,
             raw_payload: rawBody
           });
-          return new Response(`Transcript fetch failed: ${err.message}`, { status: 500 });
+          return new Response(`Transcript fetch error: ${fetchResp.status}`, { status: 500 });
         }
 
-        await logToGrafana(env, 'info', 'Rev.ai callback received', {
+        await logToGrafana(env, 'info', 'Transcript fetch successful', {
           source: 'gr8r-revaicallback-worker',
           service: 'callback',
           id,
-          transcription_id: id,
-          status,
-          transcript: transcript || 'N/A',
-          title,
-          transcript_text_length: transcriptText.length,
-          metadata: metadata || 'none',
+          transcript_snippet: fetchText.slice(0, 100),
           raw_payload: rawBody
         });
 
@@ -127,3 +122,4 @@ async function logToGrafana(env, level, message, meta = {}) {
     console.error('📛 Logger failed:', err.message, '📤 Original payload:', payload);
   }
 }
+
