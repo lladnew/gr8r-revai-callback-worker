@@ -16,7 +16,7 @@ service = "gr8r-airtable-worker"
 
 [[services]]
 binding = "R2"
-service = "gr8r-r2-worker"
+service = "gr8r-assets-worker"
 
 [[routes]]
 pattern = "callback.gr8r.com/*"
