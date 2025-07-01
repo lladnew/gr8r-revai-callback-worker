@@ -6,6 +6,10 @@ compatibility_date = "2025-06-24"
 binding = "GRAFANA"
 service = "gr8r-grafana-worker"
 
+[[services]]
+binding = "REVAIFETCH"
+service = "gr8r-revai-worker"
+
 [[routes]]
 pattern = "callback.gr8r.com/*"
 zone_name = "gr8r.com"
