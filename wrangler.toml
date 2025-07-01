@@ -10,6 +10,14 @@ service = "gr8r-grafana-worker"
 binding = "REVAIFETCH"
 service = "gr8r-revai-worker"
 
+[[services]]
+binding = "AIRTABLE"
+service = "gr8r-airtable-worker"
+
+[[services]]
+binding = "R2"
+service = "gr8r-r2-worker"
+
 [[routes]]
 pattern = "callback.gr8r.com/*"
 zone_name = "gr8r.com"
