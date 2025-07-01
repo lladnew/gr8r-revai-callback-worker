@@ -1,3 +1,9 @@
+// v1.0.9 gr8r-revai-callback-worker
+// RESTORED: R2 transcript upload and Airtable update logic removed without changelog in v1.0.6–v1.0.8
+// - ADDED: uploads transcript text to R2 via `ASSETS` binding at key `transcripts/{title}.txt`
+// - ADDED: updates Airtable via `AIRTABLE` binding using table ID `tblQKTuBRVrpJLmJp`
+// - ADDED: logs success/failure of R2 upload and Airtable update to Grafana (v1.0.9)
+// - RETAINED: Rev.ai transcript fetch via `REVAIFETCH`, full error capture, and raw_payload logging (v1.0.9)
 // v1.0.8 gr8r-revai-callback-worker
 // ENHANCED: added `title` and `transcript_url` to both success and error Grafana logs (v1.0.8)
 // OPTIONAL: added check to skip callbacks if status is not 'completed' (v1.0.8)
@@ -49,13 +55,12 @@ export default {
 
         const title = metadata.title || 'Untitled';
 
-        // Skip if transcript not ready
         if (status !== 'completed' || !transcript) {
           return new Response('Callback ignored: status not completed or transcript missing', { status: 204 });
         }
 
-        // Fetch transcript text from internal revai-worker using service binding
-        const fetchResp = await env.REVAI.fetch('https://internal/api/revai/fetch-transcript', {
+        // Step 1: Fetch transcript text
+        const fetchResp = await env.REVAIFETCH.fetch('https://internal/api/revai/fetch-transcript', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transcript_url: transcript })
@@ -79,6 +84,64 @@ export default {
           transcript_url: transcript,
           transcript_snippet: fetchText.slice(0, 100),
           raw_payload: rawBody
+        });
+
+        // Step 2: Upload to R2
+        const r2Key = `transcripts/${title}.txt`;
+        const r2Resp = await env.ASSETS.fetch('https://internal/r2/put', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            key: r2Key,
+            body: fetchText,
+            contentType: 'text/plain'
+          })
+        });
+
+        const r2Result = await r2Resp.text();
+        if (!r2Resp.ok) {
+          await logToGrafana(env, 'error', 'R2 upload failed', {
+            error: `R2 upload failed: ${r2Resp.status}`,
+            r2Response: r2Result,
+            title,
+            r2_key: r2Key
+          });
+          return new Response(`R2 upload failed: ${r2Resp.status}`, { status: 500 });
+        }
+
+        const r2Url = `https://videos.gr8r.com/${r2Key}`;
+        await logToGrafana(env, 'info', 'R2 upload successful', {
+          title,
+          r2_url: r2Url
+        });
+
+        // Step 3: Update Airtable
+        const airtableResp = await env.AIRTABLE.fetch('https://internal/api/airtable/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            table: 'tblQKTuBRVrpJLmJp',
+            title,
+            fields: {
+              'R2 Transcript URL': r2Url,
+              Status: 'Transcription Complete'
+            }
+          })
+        });
+
+        const airtableResult = await airtableResp.text();
+        if (!airtableResp.ok) {
+          await logToGrafana(env, 'error', 'Airtable update failed', {
+            error: `Airtable update failed: ${airtableResp.status}`,
+            airtableResponse: airtableResult,
+            title
+          });
+          return new Response(`Airtable update failed: ${airtableResp.status}`, { status: 500 });
+        }
+
+        await logToGrafana(env, 'info', 'Airtable update successful', {
+          title,
+          r2_url: r2Url
         });
 
         return new Response(JSON.stringify({ success: true }), {
