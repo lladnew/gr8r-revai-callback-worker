@@ -1,3 +1,6 @@
+// v1.1.3 gr8r-revai-callback-worker
+// - FIXED: all internal fetch() calls now explicitly use env.<BINDING>.fetch (v1.1.3)
+// - RETAINED: entire logic and structure from v1.1.2 unchanged except binding fix (v1.1.3)
 // v1.1.2 gr8r-revai-callback-worker
 // - FIXED: Rev.ai retry loop by ensuring 200 OK is always returned after processing (v1.1.2)
 // - ADDED: wraps transcript fetch, R2 upload, and Airtable update in try/catch block (v1.1.2)
@@ -236,4 +239,3 @@ async function logToGrafana(env, level, message, meta = {}) {
     console.error('📛 Logger failed:', err.message, '📤 Original payload:', payload);
   }
 }
-
