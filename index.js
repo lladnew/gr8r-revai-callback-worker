@@ -1,3 +1,11 @@
+// v1.1.2 gr8r-revai-callback-worker
+// - FIXED: Rev.ai retry loop by ensuring 200 OK is always returned after processing (v1.1.2)
+// - ADDED: wraps transcript fetch, R2 upload, and Airtable update in try/catch block (v1.1.2)
+// - ADDED: on failure, logs error to Grafana but still returns 200 OK with { success: false } (v1.1.2)
+// - ADDED: skips processing if Airtable record for job.id exists and has Status = 'Transcription Complete' (v1.1.2)
+// - RETAINED: exact log structure, R2 key format, Airtable field mappings, and internal service calls (v1.1.2)
+// - RETAINED: all v1.1.1 behavior including use of metadata as title and job.id as Transcript ID match
+// v1.1.1 gr8r-revai-callback-worker
 // FIXED: parses Rev.ai callback correctly using `body.job` structure (v1.1.1)
 // - CHANGED: destructures fields from `body.job` instead of `body`
 // - CHANGED: transcript fetch request now passes `{ job_id }` instead of `{ transcript_url }`
@@ -50,7 +58,6 @@
 // ADDED: raw_payload to Grafana logs for successful callbacks (v1.0.2)
 // v1.0.1
 // added code starting line 16 to add transcription ID and metadata to grafana logs (v1.0.1)
-// v1.1.1 gr8r-revai-callback-worker
 
 export default {
   async fetch(request, env, ctx) {
@@ -76,7 +83,7 @@ export default {
         return new Response('Missing required job fields', { status: 400 });
       }
 
-      const { id, status, metadata, name } = job;
+      const { id, status, metadata } = job;
       const title = metadata || 'Untitled';
 
       await logToGrafana(env, 'debug', 'Parsed callback body', {
@@ -86,105 +93,114 @@ export default {
       });
 
       if (status !== 'transcribed') {
-        return new Response('Callback ignored: status not transcribed', { status: 204 });
+        return new Response('Callback ignored: status not transcribed', { status: 200 });
       }
 
-      // Step 1: Fetch transcript text using job_id
-      console.log('[revai-callback] Fetching transcript from REVAIFETCH...');
-      await logToGrafana(env, 'debug', 'Fetching transcript from REVAIFETCH', { job_id: id });
-      const fetchResp = await env.REVAIFETCH.fetch('https://internal/api/revai/fetch-transcript', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_id: id })
-      });
+      try {
+        // Check Airtable first: skip if Status is already 'Transcription Complete'
+        const checkResp = await env.AIRTABLE.fetch('https://internal/api/airtable/get', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            table: 'tblQKTuBRVrpJLmJp',
+            matchField: 'Transcript ID',
+            matchValue: id
+          })
+        });
 
-      const fetchText = await fetchResp.text();
-      if (!fetchResp.ok) {
-        await logToGrafana(env, 'error', 'Transcript fetch failed', {
-          error: `Transcript fetch failed: ${fetchResp.status}`,
-          revResponse: fetchText,
+        const checkData = await checkResp.json();
+        const found = Array.isArray(checkData.records) && checkData.records.length > 0;
+        const alreadyDone = found && checkData.records[0].fields?.Status === 'Transcription Complete';
+
+        if (alreadyDone) {
+          await logToGrafana(env, 'info', 'Transcript already processed, skipping', {
+            job_id: id,
+            title
+          });
+          return new Response(JSON.stringify({ success: false, reason: 'Already complete' }), { status: 200 });
+        }
+
+        // Step 1: Fetch transcript text using job_id
+        await logToGrafana(env, 'debug', 'Fetching transcript from REVAIFETCH', { job_id: id });
+        const fetchResp = await env.REVAIFETCH.fetch('https://internal/api/revai/fetch-transcript', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: id })
+        });
+
+        const fetchText = await fetchResp.text();
+        if (!fetchResp.ok) {
+          throw new Error(`Transcript fetch failed: ${fetchResp.status} - ${fetchText}`);
+        }
+
+        await logToGrafana(env, 'info', 'Transcript fetch successful', {
+          id,
           title,
-          job_id: id,
+          transcript_snippet: fetchText.slice(0, 100),
           raw_payload: rawBody
         });
-        return new Response(`Transcript fetch error: ${fetchResp.status}`, { status: 500 });
-      }
 
-      await logToGrafana(env, 'info', 'Transcript fetch successful', {
-        id,
-        title,
-        transcript_snippet: fetchText.slice(0, 100),
-        raw_payload: rawBody
-      });
-
-      // Step 2: Upload to R2
-      const r2Key = `transcripts/${title}.txt`;
-      console.log('[revai-callback] Uploading transcript to R2 via ASSETS...');
-      await logToGrafana(env, 'debug', 'Uploading transcript to R2', { r2_key: r2Key });
-      const r2Resp = await env.ASSETS.fetch('https://internal/r2/put', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          key: r2Key,
-          body: fetchText,
-          contentType: 'text/plain'
-        })
-      });
-
-      const r2Result = await r2Resp.text();
-      if (!r2Resp.ok) {
-        await logToGrafana(env, 'error', 'R2 upload failed', {
-          error: `R2 upload failed: ${r2Resp.status}`,
-          r2Response: r2Result,
-          title,
-          r2_key: r2Key
+        // Step 2: Upload to R2
+        const r2Key = `transcripts/${title}.txt`;
+        await logToGrafana(env, 'debug', 'Uploading transcript to R2', { r2_key: r2Key });
+        const r2Resp = await env.ASSETS.fetch('https://internal/r2/put', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            key: r2Key,
+            body: fetchText,
+            contentType: 'text/plain'
+          })
         });
-        return new Response(`R2 upload failed: ${r2Resp.status}`, { status: 500 });
-      }
 
-      const r2Url = `https://videos.gr8r.com/${r2Key}`;
-      await logToGrafana(env, 'info', 'R2 upload successful', {
-        title,
-        r2_url: r2Url
-      });
+        if (!r2Resp.ok) {
+          throw new Error(`R2 upload failed: ${r2Resp.status} - ${await r2Resp.text()}`);
+        }
 
-      // Step 3: Update Airtable
-      console.log('[revai-callback] Updating Airtable via AIRTABLE worker...');
-      await logToGrafana(env, 'debug', 'Updating Airtable record', { title, job_id: id });
-      const airtableResp = await env.AIRTABLE.fetch('https://internal/api/airtable/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          table: 'tblQKTuBRVrpJLmJp',
-          matchField: 'Transcript ID',
-          matchValue: id,
-          fields: {
-            'R2 Transcript URL': r2Url,
-            Status: 'Transcription Complete'
-          }
-        })
-      });
+        const r2Url = `https://videos.gr8r.com/${r2Key}`;
+        await logToGrafana(env, 'info', 'R2 upload successful', { title, r2_url: r2Url });
 
-      const airtableResult = await airtableResp.text();
-      if (!airtableResp.ok) {
-        await logToGrafana(env, 'error', 'Airtable update failed', {
-          error: `Airtable update failed: ${airtableResp.status}`,
-          airtableResponse: airtableResult,
-          title,
-          job_id: id
+        // Step 3: Update Airtable
+        await logToGrafana(env, 'debug', 'Updating Airtable record', { title, job_id: id });
+        const airtableResp = await env.AIRTABLE.fetch('https://internal/api/airtable/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            table: 'tblQKTuBRVrpJLmJp',
+            matchField: 'Transcript ID',
+            matchValue: id,
+            fields: {
+              'R2 Transcript URL': r2Url,
+              Status: 'Transcription Complete'
+            }
+          })
         });
-        return new Response(`Airtable update failed: ${airtableResp.status}`, { status: 500 });
+
+        if (!airtableResp.ok) {
+          throw new Error(`Airtable update failed: ${airtableResp.status} - ${await airtableResp.text()}`);
+        }
+
+        await logToGrafana(env, 'info', 'Airtable update successful', {
+          title,
+          r2_url: r2Url
+        });
+
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (err) {
+        await logToGrafana(env, 'error', 'Callback processing error', {
+          title,
+          job_id: id,
+          error: err.message
+        });
+
+        return new Response(JSON.stringify({ success: false }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
-
-      await logToGrafana(env, 'info', 'Airtable update successful', {
-        title,
-        r2_url: r2Url
-      });
-
-      return new Response(JSON.stringify({ success: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
     }
 
     return new Response('Not found', { status: 404 });
@@ -203,7 +219,6 @@ async function logToGrafana(env, level, message, meta = {}) {
   };
 
   try {
-    console.log('[revai-callback] Sending log to Grafana:', message);
     const res = await env.GRAFANA.fetch('https://internal/api/grafana', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -221,3 +236,4 @@ async function logToGrafana(env, level, message, meta = {}) {
     console.error('📛 Logger failed:', err.message, '📤 Original payload:', payload);
   }
 }
+
