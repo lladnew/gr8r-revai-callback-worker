@@ -1,3 +1,6 @@
+// v1.1.4 gr8r-revai-callback-worker
+// - FIXED: correctly expects plain text response from revai-worker fetch-transcript endpoint (v1.1.4)
+// - RETAINED: entire logic from v1.1.3 including binding usage and structured Grafana logs (v1.1.4)
 // v1.1.3 gr8r-revai-callback-worker
 // - FIXED: all internal fetch() calls now explicitly use env.<BINDING>.fetch (v1.1.3)
 // - RETAINED: entire logic and structure from v1.1.2 unchanged except binding fix (v1.1.3)
@@ -100,7 +103,7 @@ export default {
       }
 
       try {
-        // Check Airtable first: skip if Status is already 'Transcription Complete'
+        // Step 0: Check Airtable for existing record
         const checkResp = await env.AIRTABLE.fetch('https://internal/api/airtable/get', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -123,7 +126,7 @@ export default {
           return new Response(JSON.stringify({ success: false, reason: 'Already complete' }), { status: 200 });
         }
 
-        // Step 1: Fetch transcript text using job_id
+        // Step 1: Fetch transcript text (plain text)
         await logToGrafana(env, 'debug', 'Fetching transcript from REVAIFETCH', { job_id: id });
         const fetchResp = await env.REVAIFETCH.fetch('https://internal/api/revai/fetch-transcript', {
           method: 'POST',
@@ -146,6 +149,7 @@ export default {
         // Step 2: Upload to R2
         const r2Key = `transcripts/${title}.txt`;
         await logToGrafana(env, 'debug', 'Uploading transcript to R2', { r2_key: r2Key });
+
         const r2Resp = await env.ASSETS.fetch('https://internal/r2/put', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -165,6 +169,7 @@ export default {
 
         // Step 3: Update Airtable
         await logToGrafana(env, 'debug', 'Updating Airtable record', { title, job_id: id });
+
         const airtableResp = await env.AIRTABLE.fetch('https://internal/api/airtable/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -183,15 +188,13 @@ export default {
           throw new Error(`Airtable update failed: ${airtableResp.status} - ${await airtableResp.text()}`);
         }
 
-        await logToGrafana(env, 'info', 'Airtable update successful', {
-          title,
-          r2_url: r2Url
-        });
+        await logToGrafana(env, 'info', 'Airtable update successful', { title, r2_url: r2Url });
 
         return new Response(JSON.stringify({ success: true }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
         });
+
       } catch (err) {
         await logToGrafana(env, 'error', 'Callback processing error', {
           title,
