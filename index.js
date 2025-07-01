@@ -1,3 +1,9 @@
+// v1.0.7 gr8r-revai-callback-worker
+// FIXED: properly calls internal binding to gr8r-revai-worker using env.REVAI (v1.0.7)
+// - CHANGED: fetch URL to 'https://internal/api/revai/fetch-transcript' and uses env.REVAI (v1.0.7)
+// - FIXED: sends correct POST body { transcript_url } to match revai-worker input (v1.0.7)
+// - RETAINED: raw_payload logging, structured error capture, and R2/Airtable update logic (v1.0.7)
+//
 // v1.0.6 gr8r-revai-callback-worker
 // CHANGED: replaced direct Rev.ai transcript fetch with internal call to gr8r-revai-worker (v1.0.6)
 // - NEW: constructs internal fetch to https://revai.gr8r.com/api/revai/fetch-transcript (v1.0.6)
@@ -39,18 +45,17 @@ export default {
         const body = await request.json();
         const { id, status, transcript, metadata } = body;
 
-        if (!id || !status || !metadata) {
-          return new Response('Missing required fields (id, status, metadata)', { status: 400 });
+        if (!id || !status || !metadata || !transcript) {
+          return new Response('Missing required fields (id, status, metadata, transcript)', { status: 400 });
         }
 
         const title = metadata.title || 'Untitled';
 
-        // Fetch transcript text from internal revai-worker
-        const fetchUrl = 'https://revai.gr8r.com/api/revai/fetch-transcript';
-        const fetchResp = await fetch(fetchUrl, {
+        // Fetch transcript text from internal revai-worker using service binding
+        const fetchResp = await env.REVAI.fetch('https://internal/api/revai/fetch-transcript', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id })
+          body: JSON.stringify({ transcript_url: transcript })
         });
 
         const fetchText = await fetchResp.text();
@@ -58,16 +63,12 @@ export default {
           await logToGrafana(env, 'error', 'Transcript fetch failed', {
             error: `Transcript fetch failed: ${fetchResp.status}`,
             revResponse: fetchText,
-            source: 'gr8r-revaicallback-worker',
-            service: 'callback',
             raw_payload: rawBody
           });
           return new Response(`Transcript fetch error: ${fetchResp.status}`, { status: 500 });
         }
 
         await logToGrafana(env, 'info', 'Transcript fetch successful', {
-          source: 'gr8r-revaicallback-worker',
-          service: 'callback',
           id,
           transcript_snippet: fetchText.slice(0, 100),
           raw_payload: rawBody
@@ -79,8 +80,6 @@ export default {
         });
       } catch (err) {
         await logToGrafana(env, 'error', 'Unexpected Rev.ai callback error', {
-          source: 'gr8r-revaicallback-worker',
-          service: 'callback',
           error: err.message,
           stack: err.stack,
           raw_payload: await request.text()
@@ -98,7 +97,7 @@ async function logToGrafana(env, level, message, meta = {}) {
     level,
     message,
     meta: {
-      source: meta.source || 'gr8r-revaicallback-worker',
+      source: meta.source || 'gr8r-revai-callback-worker',
       service: meta.service || 'callback',
       ...meta
     }
@@ -122,4 +121,3 @@ async function logToGrafana(env, level, message, meta = {}) {
     console.error('📛 Logger failed:', err.message, '📤 Original payload:', payload);
   }
 }
-
