@@ -1,3 +1,7 @@
+// v1.1.5 gr8r-revai-callback-worker
+// - ADDED: console.log of fetched transcript text for debugging (v1.1.5)
+// - ADDED: Grafana log with fetchText snippet and status for debugging (v1.1.5)
+// - RETAINED: all logic from v1.1.4, no changes to fetch, R2, Airtable steps (v1.1.5)
 // v1.1.4 gr8r-revai-callback-worker
 // - FIXED: correctly expects plain text response from revai-worker fetch-transcript endpoint (v1.1.4)
 // - RETAINED: entire logic from v1.1.3 including binding usage and structured Grafana logs (v1.1.4)
@@ -125,7 +129,6 @@ export default {
           });
           return new Response(JSON.stringify({ success: false, reason: 'Already complete' }), { status: 200 });
         }
-
         // Step 1: Fetch transcript text (plain text)
         await logToGrafana(env, 'debug', 'Fetching transcript from REVAIFETCH', { job_id: id });
         const fetchResp = await env.REVAIFETCH.fetch('https://internal/api/revai/fetch-transcript', {
@@ -138,6 +141,14 @@ export default {
         if (!fetchResp.ok) {
           throw new Error(`Transcript fetch failed: ${fetchResp.status} - ${fetchText}`);
         }
+        //added 7 lines for troubleshooting to show revai-worker fetch result
+console.log('[revai-callback] Fetched transcript:', fetchText);
+await logToGrafana(env, 'debug', 'Transcript fetch result', {
+  job_id: id,
+  title,
+  fetch_status: fetchResp.status,
+  snippet: fetchText.slice(0, 100)
+});
 
         await logToGrafana(env, 'info', 'Transcript fetch successful', {
           id,
