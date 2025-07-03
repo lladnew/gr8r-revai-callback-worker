@@ -1,3 +1,7 @@
+//v1.1.7 gr8r-revai-callback-worker
+//ADDED: console.log('[revai-callback] Top of handler') to verify if the Worker is executing at all
+//ADDED: secondary console.log() after request.clone().text() to verify body read step
+//RETAINED: all previous logic from v1.1.6, including robust JSON parsing and Grafana logging
 //v1.1.6 gr8r-revai-callback-worker
 //- SPLIT: separated rawBody read and JSON.parse into two try/catch blocks for granular error capture
 //- ADDED: error logging to Grafana if body read or parse fails, with full rawBody and error message
@@ -83,9 +87,13 @@ export default {
 
 let rawBody, body;
 
+// NEW: Verify that tail log starts
+console.log('[revai-callback] Top of handler');
+
 // Step 1: Try to get raw text safely
 try {
   rawBody = await request.clone().text();
+  console.log('[revai-callback] Raw body successfully read'); // <== NEW marker
   console.log('[revai-callback] Raw body:', rawBody);
 } catch (e) {
   console.error('[revai-callback] Failed to read raw body:', e.message);
