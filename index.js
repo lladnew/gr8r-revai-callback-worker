@@ -77,9 +77,12 @@
 // v1.0.1
 // added code starting line 16 to add transcription ID and metadata to grafana logs (v1.0.1)
 
+console.log('[revai-callback] Worker loaded'); // Logs when the Worker is initialized (cold start)
 export default {
   async fetch(request, env, ctx) {
+    console.log('[revai-callback] Handler started');// Logs on every request
     const url = new URL(request.url);
+    
 
     if (url.pathname === '/api/revai/callback' && request.method === 'POST') {
       console.log('[revai-callback] Callback triggered');
