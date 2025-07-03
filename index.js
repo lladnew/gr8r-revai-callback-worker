@@ -1,3 +1,7 @@
+//v1.1.6 gr8r-revai-callback-worker
+//- SPLIT: separated rawBody read and JSON.parse into two try/catch blocks for granular error capture
+//- ADDED: error logging to Grafana if body read or parse fails, with full rawBody and error message
+//- RETAINED: existing debug and console logs where successful
 // v1.1.5 gr8r-revai-callback-worker
 // - ADDED: console.log of fetched transcript text for debugging (v1.1.5)
 // - ADDED: Grafana log with fetchText snippet and status for debugging (v1.1.5)
@@ -77,16 +81,32 @@ export default {
       console.log('[revai-callback] Callback triggered');
       await logToGrafana(env, 'debug', 'Callback triggered');
 
-      let rawBody, body;
-      try {
-        rawBody = await request.clone().text();
-        console.log('[revai-callback] Raw body:', rawBody);
-        body = JSON.parse(rawBody);
-        console.log('[revai-callback] Parsed body:', body);
-      } catch (e) {
-        console.error('[revai-callback] Failed to parse body:', e.message);
-        return new Response('Bad JSON', { status: 400 });
-      }
+let rawBody, body;
+
+// Step 1: Try to get raw text safely
+try {
+  rawBody = await request.clone().text();
+  console.log('[revai-callback] Raw body:', rawBody);
+} catch (e) {
+  console.error('[revai-callback] Failed to read raw body:', e.message);
+  await logToGrafana(env, 'error', 'Failed to read raw body', {
+    error: e.message
+  });
+  return new Response('Body read failed', { status: 400 });
+}
+
+// Step 2: Try to parse JSON
+try {
+  body = JSON.parse(rawBody);
+  console.log('[revai-callback] Parsed body:', body);
+} catch (e) {
+  console.error('[revai-callback] Failed to parse body:', e.message);
+  await logToGrafana(env, 'error', 'Failed to parse JSON body', {
+    rawBody,
+    error: e.message
+  });
+  return new Response('Bad JSON', { status: 400 });
+}
 
       const job = body.job;
       if (!job || !job.id || !job.status) {
