@@ -1,5 +1,6 @@
-// v1.1.9 gr8r-revai-callback-worker
-// ChatGPT finally says we should remove the full URL line 194 see FIXED below
+// v1.2.0 gr8r-revai-callback-worker
+// Removed "env.ASSETS.fetch('r2/put') and replaced with direct evn.VIDEO_BUCKET.put(...)
+// v1.1.9
 //FIXED: Internal fetch path for REVAIFETCH now uses correct relative path (/api/revai/fetch-transcript) instead of invalid full URL with /internal prefix (prevented "Not found" error)
 //ADDED: Error handling and Grafana logging for Airtable get record check, including HTTP status and response body on failure
 // v1.1.8 gr8r-revai-callback-worker
@@ -219,19 +220,13 @@ if (!fetchResp.ok) {
         const r2Key = `transcripts/${title}.txt`;
         await logToGrafana(env, 'debug', 'Uploading transcript to R2', { r2_key: r2Key });
 
-        const r2Resp = await env.ASSETS.fetch('https://internal/r2/put', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            key: r2Key,
-            body: fetchText,
-            contentType: 'text/plain'
-          })
-        });
-
-        if (!r2Resp.ok) {
-          throw new Error(`R2 upload failed: ${r2Resp.status} - ${await r2Resp.text()}`);
-        }
+       try {
+  await env.VIDEO_BUCKET.put(r2Key, fetchText, {
+    httpMetadata: { contentType: 'text/plain' }
+  });
+} catch (err) {
+  throw new Error(`R2 upload failed: ${err.message}`);
+}
 
         const r2Url = `https://videos.gr8r.com/${r2Key}`;
         await logToGrafana(env, 'info', 'R2 upload successful', { title, r2_url: r2Url });
