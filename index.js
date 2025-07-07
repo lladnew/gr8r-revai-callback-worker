@@ -1,3 +1,5 @@
+// v1.2.1 gr8r-revai-callback-worker
+// undoing eroneous "fix" in 1.1.9
 // v1.2.0 gr8r-revai-callback-worker
 // Removed "env.ASSETS.fetch('r2/put') and replaced with direct evn.VIDEO_BUCKET.put(...)
 // v1.1.9
@@ -192,7 +194,7 @@ await logToGrafana(env, 'debug', 'Sending request to REVAIFETCH', {
 
 let fetchResp, fetchText;
 try {
-  fetchResp = await env.REVAIFETCH.fetch('/api/revai/fetch-transcript', {
+  fetchResp = await env.REVAIFETCH.fetch('https://internal/api/revai/fetch-transcript', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ job_id: id })
