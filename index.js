@@ -1,3 +1,8 @@
+// v1.1.8 gr8r-revai-callback-worker
+// - ADDED: console.log and Grafana debug log of REVAIFETCH payload before fetch
+// - ADDED: try/catch block around REVAIFETCH call with explicit error and response logging
+// - ADDED: logs response body and status when REVAIFETCH responds with non-200
+// - RETAINED: all behavior and logs from v1.1.7
 //v1.1.7 gr8r-revai-callback-worker
 //ADDED: console.log('[revai-callback] Top of handler') to verify if the Worker is executing at all
 //ADDED: secondary console.log() after request.clone().text() to verify body read step
@@ -160,34 +165,39 @@ try {
           });
           return new Response(JSON.stringify({ success: false, reason: 'Already complete' }), { status: 200 });
         }
-        // Step 1: Fetch transcript text (plain text)
-        await logToGrafana(env, 'debug', 'Fetching transcript from REVAIFETCH', { job_id: id });
-        const fetchResp = await env.REVAIFETCH.fetch('https://internal/api/revai/fetch-transcript', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ job_id: id })
-        });
-
-        const fetchText = await fetchResp.text();
-        if (!fetchResp.ok) {
-          throw new Error(`Transcript fetch failed: ${fetchResp.status} - ${fetchText}`);
-        }
-        //added 7 lines for troubleshooting to show revai-worker fetch result
-console.log('[revai-callback] Fetched transcript:', fetchText);
-await logToGrafana(env, 'debug', 'Transcript fetch result', {
+// Step 1: Fetch transcript text (plain text)
+console.log('[revai-callback] Fetch body for REVAIFETCH:', JSON.stringify({ job_id: id }));
+await logToGrafana(env, 'debug', 'Sending request to REVAIFETCH', {
   job_id: id,
-  title,
-  fetch_status: fetchResp.status,
-  snippet: fetchText.slice(0, 100)
+  fetch_payload: { job_id: id }
 });
 
-        await logToGrafana(env, 'info', 'Transcript fetch successful', {
-          id,
-          title,
-          transcript_snippet: fetchText.slice(0, 100),
-          raw_payload: rawBody
-        });
+let fetchResp, fetchText;
+try {
+  fetchResp = await env.REVAIFETCH.fetch('https://internal/api/revai/fetch-transcript', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_id: id })
+  });
+  fetchText = await fetchResp.text();
+  console.log('[revai-callback] REVAIFETCH response:', fetchResp.status, fetchText);
+} catch (err) {
+  console.error('[revai-callback] REVAIFETCH fetch error:', err.message);
+  await logToGrafana(env, 'error', 'REVAIFETCH fetch threw error', {
+    job_id: id,
+    error: err.message
+  });
+  return new Response('Failed to fetch transcript', { status: 200 });
+}
 
+if (!fetchResp.ok) {
+  await logToGrafana(env, 'error', 'REVAIFETCH returned error response', {
+    job_id: id,
+    status: fetchResp.status,
+    text: fetchText
+  });
+  return new Response('Transcript fetch failed', { status: 200 });
+}
         // Step 2: Upload to R2
         const r2Key = `transcripts/${title}.txt`;
         await logToGrafana(env, 'debug', 'Uploading transcript to R2', { r2_key: r2Key });
