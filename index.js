@@ -1,5 +1,5 @@
 // v1.1.9 gr8r-revai-callback-worker
-// ChatGPT finally says we should remove the full URL line 179 see FIXED below
+// ChatGPT finally says we should remove the full URL line 194 see FIXED below
 //FIXED: Internal fetch path for REVAIFETCH now uses correct relative path (/api/revai/fetch-transcript) instead of invalid full URL with /internal prefix (prevented "Not found" error)
 //ADDED: Error handling and Grafana logging for Airtable get record check, including HTTP status and response body on failure
 // v1.1.8 gr8r-revai-callback-worker
@@ -191,7 +191,7 @@ await logToGrafana(env, 'debug', 'Sending request to REVAIFETCH', {
 
 let fetchResp, fetchText;
 try {
-  fetchResp = await env.REVAIFETCH.fetch(/api/revai/fetch-transcript', {
+  fetchResp = await env.REVAIFETCH.fetch('/api/revai/fetch-transcript', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ job_id: id })
