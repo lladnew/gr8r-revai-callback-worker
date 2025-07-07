@@ -1,3 +1,5 @@
+// v1.2.2 gr8r-revai-callback-worker
+// adding airtable error logging at line 255
 // v1.2.1 gr8r-revai-callback-worker
 // undoing eroneous "fix" in 1.1.9
 // v1.2.0 gr8r-revai-callback-worker
@@ -250,9 +252,18 @@ if (!fetchResp.ok) {
           })
         });
 
-        if (!airtableResp.ok) {
-          throw new Error(`Airtable update failed: ${airtableResp.status} - ${await airtableResp.text()}`);
-        }
+if (!airtableResp.ok) {
+  const errorText = await airtableResp.text();
+  console.error('[revai-callback] Airtable update failed:', airtableResp.status, errorText);
+  await logToGrafana(env, 'error', 'Airtable update failed', {
+    title,
+    r2_url: r2Url,
+    job_id: id,
+    status: airtableResp.status,
+    response: errorText
+  });
+  throw new Error(`Airtable update failed: ${airtableResp.status} - ${errorText}`);
+}
 
         await logToGrafana(env, 'info', 'Airtable update successful', { title, r2_url: r2Url });
 
