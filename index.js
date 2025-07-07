@@ -1,3 +1,7 @@
+// v1.1.9 gr8r-revai-callback-worker
+// ChatGPT finally says we should remove the full URL line 179 see FIXED below
+//FIXED: Internal fetch path for REVAIFETCH now uses correct relative path (/api/revai/fetch-transcript) instead of invalid full URL with /internal prefix (prevented "Not found" error)
+//ADDED: Error handling and Grafana logging for Airtable get record check, including HTTP status and response body on failure
 // v1.1.8 gr8r-revai-callback-worker
 // - ADDED: console.log and Grafana debug log of REVAIFETCH payload before fetch
 // - ADDED: try/catch block around REVAIFETCH call with explicit error and response logging
@@ -144,6 +148,7 @@ try {
 
       try {
         // Step 0: Check Airtable for existing record
+        
         const checkResp = await env.AIRTABLE.fetch('https://internal/api/airtable/get', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -154,17 +159,29 @@ try {
           })
         });
 
-        const checkData = await checkResp.json();
-        const found = Array.isArray(checkData.records) && checkData.records.length > 0;
-        const alreadyDone = found && checkData.records[0].fields?.Status === 'Transcription Complete';
+       if (!checkResp.ok) {
+  const errorText = await checkResp.text();
+  console.error('[revai-callback] Airtable fetch failed:', checkResp.status, errorText);
+  await logToGrafana(env, 'error', 'Airtable fetch failed', {
+    job_id: id,
+    status: checkResp.status,
+    response: errorText
+  });
+  return new Response('Airtable check failed', { status: 200 });
+}
 
-        if (alreadyDone) {
-          await logToGrafana(env, 'info', 'Transcript already processed, skipping', {
-            job_id: id,
-            title
-          });
-          return new Response(JSON.stringify({ success: false, reason: 'Already complete' }), { status: 200 });
-        }
+const checkData = await checkResp.json();
+const found = Array.isArray(checkData.records) && checkData.records.length > 0;
+const alreadyDone = found && checkData.records[0].fields?.Status === 'Transcription Complete';
+
+if (alreadyDone) {
+  await logToGrafana(env, 'info', 'Transcript already processed, skipping', {
+    job_id: id,
+    title
+  });
+  return new Response(JSON.stringify({ success: false, reason: 'Already complete' }), { status: 200 });
+}
+
 // Step 1: Fetch transcript text (plain text)
 console.log('[revai-callback] Fetch body for REVAIFETCH:', JSON.stringify({ job_id: id }));
 await logToGrafana(env, 'debug', 'Sending request to REVAIFETCH', {
@@ -174,7 +191,7 @@ await logToGrafana(env, 'debug', 'Sending request to REVAIFETCH', {
 
 let fetchResp, fetchText;
 try {
-  fetchResp = await env.REVAIFETCH.fetch('https://internal/api/revai/fetch-transcript', {
+  fetchResp = await env.REVAIFETCH.fetch(/api/revai/fetch-transcript', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ job_id: id })
