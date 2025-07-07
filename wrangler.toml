@@ -2,6 +2,10 @@ name = "gr8r-revai-callback-worker"
 main = "index.js"
 compatibility_date = "2025-06-24"
 
+[[r2_buckets]]
+binding = "VIDEO_BUCKET"
+bucket_name = "videos-gr8r"
+
 [[services]]
 binding = "GRAFANA"
 service = "gr8r-grafana-worker"
