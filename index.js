@@ -159,7 +159,7 @@ try {
         status,
         title
       });
-let fetchResp, fetchText, socialCopy; /variables set for later use that could change
+let fetchResp, fetchText, socialCopy; //variables set for later use that could change
       if (status !== 'transcribed') {
         return new Response('Callback ignored: status not transcribed', { status: 200 });
       }
