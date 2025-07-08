@@ -226,7 +226,7 @@ if (!fetchResp.ok) {
 }
 // Step 1.5: Generate Social Copy from transcript
 try {
-  const socialCopyResponse = await env.SOCIALCOPY_WORKER.fetch('https://fake/sandbox', {
+  const socialCopyResponse = await env.SOCIALCOPY_WORKER.fetch('https://internal/api/socialcopy', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ transcript: fetchText, title })
