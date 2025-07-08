@@ -1,3 +1,5 @@
+// v1.2.8 gr8r-revai-callback-worker
+// removing r2Url from line 164 and adding const at line 274
 // v1.2.7 gr8r-revai-callback-worker
 // line 206 moved to line 162... variables must be outside try block added r2Url variable
 // v1.2.6 gr8r-revai-callback-worker
@@ -159,7 +161,7 @@ try {
         status,
         title
       });
-let fetchResp, fetchText, socialCopy, r2Url; //variables set for later use that could change
+let fetchResp, fetchText, socialCopy; //variables set for later use that could change
       if (status !== 'transcribed') {
         return new Response('Callback ignored: status not transcribed', { status: 200 });
       }
@@ -269,6 +271,7 @@ try {
        // Step 2: Upload transcript + Social Copy to R2
 const sanitizedTitle = title.replace(/[^a-zA-Z0-9 _-]/g, "").replace(/\s+/g, "_");
 const r2Key = `transcripts/${sanitizedTitle}.txt`;
+const r2Url = 'https://videos.gr8r.com/' + r2Key;
 
 let fullTextToUpload = fetchText;
 
