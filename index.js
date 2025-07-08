@@ -1,3 +1,6 @@
+// v1.2.5 gr8r-revai-callback-worker
+// Updated R2 text upload to include Social Copy
+// Updated Airtable update to include Social Copy
 // v1.2.4 gr8r-revai-callback-worker
 // added try { const socialCopyResponse = await... for fetching Social Copy from OpenAi via the socialcopy-worker - logging only for now to view output
 // v1.2.3 gr8r-revai-callback-worker
@@ -258,24 +261,30 @@ try {
     title
   });
 }
-        
-        // Step 2: Upload to R2
-        const sanitizedTitle = title.replace(/[^a-zA-Z0-9 _-]/g, "").replace(/\s+/g, "_");
-        const r2Key = `transcripts/${sanitizedTitle}.txt`;
+       // Step 2: Upload transcript + Social Copy to R2
+const sanitizedTitle = title.replace(/[^a-zA-Z0-9 _-]/g, "").replace(/\s+/g, "_");
+const r2Key = `transcripts/${sanitizedTitle}.txt`;
 
-        await logToGrafana(env, 'debug', 'Uploading transcript to R2', { r2_key: r2Key });
+let fullTextToUpload = fetchText;
 
-       try {
-  await env.VIDEO_BUCKET.put(r2Key, fetchText, {
+// Append social copy if available
+if (socialCopy?.hook || socialCopy?.body || socialCopy?.cta || socialCopy?.hashtags) {
+  fullTextToUpload += `\n\n${socialCopy.hook || ''}\n${socialCopy.body || ''}\n${socialCopy.cta || ''}\n\n${socialCopy.hashtags || ''}`.trimEnd();
+}
+
+await logToGrafana(env, 'debug', 'Uploading transcript + social copy to R2', {
+  r2_key: r2Key,
+  has_social_copy: !!socialCopy
+});
+
+try {
+  await env.VIDEO_BUCKET.put(r2Key, fullTextToUpload, {
     httpMetadata: { contentType: 'text/plain' }
   });
 } catch (err) {
   throw new Error(`R2 upload failed: ${err.message}`);
 }
-
-        const r2Url = `https://videos.gr8r.com/${r2Key}`;
-        await logToGrafana(env, 'info', 'R2 upload successful', { title, r2_url: r2Url });
-
+       
         // Step 3: Update Airtable
         await logToGrafana(env, 'debug', 'Updating Airtable record', { title, job_id: id });
 
@@ -287,9 +296,13 @@ try {
             matchField: 'Transcript ID',
             matchValue: id,
             fields: {
-              'R2 Transcript URL': r2Url,
-              Status: 'Transcription Complete'
-            }
+  'R2 Transcript URL': r2Url,
+  Status: 'Transcription Complete',
+  ...(socialCopy?.hook && { 'Social Copy Hook': socialCopy.hook }),
+  ...(socialCopy?.body && { 'Social Copy Body': socialCopy.body }),
+  ...(socialCopy?.cta && { 'Social Copy Call to Action': socialCopy.cta }),
+  ...(socialCopy?.hashtags && { Hashtags: socialCopy.hashtags })
+}
           })
         });
 
