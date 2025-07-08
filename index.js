@@ -1,3 +1,6 @@
+// v1.2.6 gr8r-revai-callback-worker
+// Updated line 204 to add socialCopy as a variable to be reused
+// Changed Airtable Status to Pending Schedule line 303
 // v1.2.5 gr8r-revai-callback-worker
 // Updated R2 text upload to include Social Copy
 // Updated Airtable update to include Social Copy
@@ -201,7 +204,7 @@ await logToGrafana(env, 'debug', 'Sending request to REVAIFETCH', {
   fetch_payload: { job_id: id }
 });
 
-let fetchResp, fetchText;
+let fetchResp, fetchText, socialCopy; /variables set for later use that could change
 try {
   fetchResp = await env.REVAIFETCH.fetch('https://internal/api/revai/fetch-transcript', {
     method: 'POST',
@@ -297,7 +300,7 @@ try {
             matchValue: id,
             fields: {
   'R2 Transcript URL': r2Url,
-  Status: 'Transcription Complete',
+  Status: 'Pending Schedule',
   ...(socialCopy?.hook && { 'Social Copy Hook': socialCopy.hook }),
   ...(socialCopy?.body && { 'Social Copy Body': socialCopy.body }),
   ...(socialCopy?.cta && { 'Social Copy Call to Action': socialCopy.cta }),
