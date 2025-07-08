@@ -7,6 +7,10 @@ binding = "VIDEO_BUCKET"
 bucket_name = "videos-gr8r"
 
 [[services]]
+binding = "SOCIALCOPY_WORKER"
+service = "gr8r-socialcopy-worker"
+
+[[services]]
 binding = "GRAFANA"
 service = "gr8r-grafana-worker"
 
