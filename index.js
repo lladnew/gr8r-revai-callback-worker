@@ -1,5 +1,6 @@
 // v1.2.6 gr8r-revai-callback-worker
 // Updated line 204 to add socialCopy as a variable to be reused
+// Updated line 251 removing const strict variable definition
 // Changed Airtable Status to Pending Schedule line 303
 // v1.2.5 gr8r-revai-callback-worker
 // Updated R2 text upload to include Social Copy
@@ -247,7 +248,7 @@ try {
       source: 'revai-callback-worker'
     });
   } else {
-    const socialCopy = await socialCopyResponse.json();
+    socialCopy = await socialCopyResponse.json();
     console.log('[revai-callback] ✅ Social Copy generated:', JSON.stringify(socialCopy, null, 2));
     await logToGrafana(env, 'info', 'Received Social Copy from worker', {
       ...socialCopy,
