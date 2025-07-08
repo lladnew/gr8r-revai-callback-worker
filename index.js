@@ -1,3 +1,5 @@
+// v1.2.3 gr8r-revai-callback-worker
+// added sanitizing for R2 transcript URL title
 // v1.2.2 gr8r-revai-callback-worker
 // adding airtable error logging at line 255
 // v1.2.1 gr8r-revai-callback-worker
@@ -221,7 +223,9 @@ if (!fetchResp.ok) {
   return new Response('Transcript fetch failed', { status: 200 });
 }
         // Step 2: Upload to R2
-        const r2Key = `transcripts/${title}.txt`;
+        const sanitizedTitle = title.replace(/[^a-zA-Z0-9 _-]/g, "").replace(/\s+/g, "_");
+        const r2Key = `transcripts/${sanitizedTitle}.txt`;
+
         await logToGrafana(env, 'debug', 'Uploading transcript to R2', { r2_key: r2Key });
 
        try {
