@@ -1,3 +1,5 @@
+// v1.2.7 gr8r-revai-callback-worker
+// line 204 moved to line 160... variables must be outside try block
 // v1.2.6 gr8r-revai-callback-worker
 // Updated line 204 to add socialCopy as a variable to be reused
 // Updated line 251 removing const strict variable definition
@@ -157,7 +159,7 @@ try {
         status,
         title
       });
-
+let fetchResp, fetchText, socialCopy; /variables set for later use that could change
       if (status !== 'transcribed') {
         return new Response('Callback ignored: status not transcribed', { status: 200 });
       }
@@ -205,7 +207,6 @@ await logToGrafana(env, 'debug', 'Sending request to REVAIFETCH', {
   fetch_payload: { job_id: id }
 });
 
-let fetchResp, fetchText, socialCopy; /variables set for later use that could change
 try {
   fetchResp = await env.REVAIFETCH.fetch('https://internal/api/revai/fetch-transcript', {
     method: 'POST',
