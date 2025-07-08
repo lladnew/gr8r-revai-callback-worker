@@ -1,3 +1,5 @@
+// v1.2.4 gr8r-revai-callback-worker
+// added try { const socialCopyResponse = await... for fetching Social Copy from OpenAi via the socialcopy-worker - logging only for now to view output
 // v1.2.3 gr8r-revai-callback-worker
 // added sanitizing for R2 transcript URL title
 // v1.2.2 gr8r-revai-callback-worker
@@ -205,7 +207,7 @@ try {
   });
   fetchText = await fetchResp.text();
   console.log('[revai-callback] REVAIFETCH response:', fetchResp.status, fetchText);
-} catch (err) {
+  } catch (err) {
   console.error('[revai-callback] REVAIFETCH fetch error:', err.message);
   await logToGrafana(env, 'error', 'REVAIFETCH fetch threw error', {
     job_id: id,
@@ -222,6 +224,41 @@ if (!fetchResp.ok) {
   });
   return new Response('Transcript fetch failed', { status: 200 });
 }
+// Step 1.5: Generate Social Copy from transcript
+try {
+  const socialCopyResponse = await env.SOCIALCOPY_WORKER.fetch('https://fake/sandbox', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transcript: fetchText, title })
+  });
+
+  if (!socialCopyResponse.ok) {
+    const errText = await socialCopyResponse.text();
+    console.error('[revai-callback] ❌ SocialCopy worker failed:', socialCopyResponse.status, errText);
+    await logToGrafana(env, 'error', 'SocialCopy worker failed', {
+      status: socialCopyResponse.status,
+      response: errText,
+      source: 'revai-callback-worker'
+    });
+  } else {
+    const socialCopy = await socialCopyResponse.json();
+    console.log('[revai-callback] ✅ Social Copy generated:', JSON.stringify(socialCopy, null, 2));
+    await logToGrafana(env, 'info', 'Received Social Copy from worker', {
+      ...socialCopy,
+      source: 'revai-callback-worker',
+      title
+    });
+  }
+} catch (err) {
+  console.error('[revai-callback] 💥 Exception while calling SocialCopy worker:', err);
+  await logToGrafana(env, 'error', 'Exception while calling SocialCopy worker', {
+    message: err.message,
+    stack: err.stack,
+    source: 'revai-callback-worker',
+    title
+  });
+}
+        
         // Step 2: Upload to R2
         const sanitizedTitle = title.replace(/[^a-zA-Z0-9 _-]/g, "").replace(/\s+/g, "_");
         const r2Key = `transcripts/${sanitizedTitle}.txt`;
